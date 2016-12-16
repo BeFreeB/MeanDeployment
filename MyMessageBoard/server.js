@@ -1,70 +1,99 @@
 var express = require("express");
 var app = express();
-var mongoose = require("path");
-var bodyParser = require("body-praser");
-app.use(bodyParser.urlencoded());
-app.set("views", path.join(__dirname, "./views"));
-app.set("view engin", "ejs");
-app.get("/", function(req, res){
-  Message.find({}, false, true).populate('_comments').exec(function(err, message){
-      res.render('inbox.ejs', {messages: messages});
-  });
+
+app.set("views", __dirname + "/views");
+app.set("view engine", "ejs");
+
+app.use(require("body-parser").urlencoded({ extended: true }));
+
+var mongoose = require("mongoose");
+
+mongoose.connect("mongodb://localhost/message-board-demo");
+
+var MessageSchema = mongoose.Schema({
+    username: {
+        type: String,
+        minlength: 4,
+        required: true
+    },
+    content: {
+        type: String,
+        required: true
+    },
+    comments: [{
+        type: mongoose.Schema.Types.ObjectId, ref: "Comment"
+    }]
 });
-app.post("/message", function(req, res){
-  var newMessage = new Message({name: req.body.name, message: req.body.message});
-  newMessage.save(function(err){
-    if(err){
-      console.log(err);
-      res.render('index.ejs', {errors: newMessage.errors});
-    } else {
-      console.log("success");
-      res.redirect('/');
+
+mongoose.model("Message", MessageSchema);
+
+var CommentSchema = mongoose.Schema({
+    username: {
+        type: String,
+        minlength: 4,
+        required: true
+    },
+    content: {
+        type: String,
+        required: true
+    },
+    _message: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message"
     }
-  })
-})
-app.post("/comment/:id", function (req, res){
-   var message_id = req.pqrqms.id;
-   Message.findOne({_id: message_id}, function(err, message){
-    var newComment = new Comment({name: req.body.name, text: req.body.comment});
-    newComment._message = message._id;
-    Message.update({_id: message._id}, {$push: {"_comments": newComment}}, function(err){
-    });
-    newComment.save(function(err){
-      if(err){
-        console.log(err)
-        res.render('index.ejs', {errors: newComment.error});
-      } else {
-        console.log("cooment added");
-        res.redirect("/");
-      }
-    });
-  });
-});
-app.listen(8000, function(){
-  console.log("server running on port 8000");
-});
-mongoose.connect('mongodb://127.0.0.1/message_board', function(err, db){
-  if(err){
-    console.log("error here");
-    console.log(err);
-  }
-});
-var Schema = mongoose.Schema;
-var MessageSchema = new mongoose.Schema({
-  //I have both the variables and the validations at the same place !!
-  name: {type: String, required: true},
-  message: {type: String, required: true},
-  _comments: [{type: Schema.Types.ObjectId, ref: 'Comment'}]
-});
-mongoose.model('Message', MessageSchema);
-var Message = mongoose.model('Message');
-
-var CommentSchema = new mongoose.Schema({
-  name: {type: String, required: true},
-  comment: {type: String, required: true},
-  _message: {type: Schema.Types.ObjectId, ref: 'Message'}
 });
 
-mongoose.model('Comment', CommentSchema);
-var Comment = mongoose.model('Comment');
-})
+mongoose.model("Comment", CommentSchema);
+
+var Message = mongoose.model("Message");
+var Comment = mongoose.model("Comment");
+
+var message = new Message({
+    username: "First User Man",
+    content: "This is the sick nasty awesome message, brah"
+});
+
+app.get("/", function (request, response) {
+    Message.find({}).populate("comments").exec(function (error, messages) {
+        if (error) { console.log(error); }
+        response.render("index", { messages: messages });
+    });
+});
+
+app.post("/messages", function (request, response) {
+    var message = new Message({
+        username: request.body.username,
+        content:  request.body.content
+    });
+    message.save(function (error) {
+        if (error) { console.log(error); }
+        response.redirect("/");
+    });
+});
+
+app.post("/comments", function (request, response) {
+    Message.findOne({ _id: request.body._message}, function (error, message) {
+        if (error) { console.log(error); }
+        var comment = new Comment({
+            username: request.body.username,
+            content:  request.body.content,
+            _message: message
+        });
+        comment.save(function (error) {
+            if (error) { 
+                console.log(error);
+                response.redirect("/");
+            } else {
+                message.comments.push(comment);
+                message.save(function (error) {
+                    if (error) { console.log(error); }
+                    response.redirect("/");
+                });
+            }
+        });
+    });
+});
+
+app.listen("5000", function () {
+    console.log("Listening on 5000");
+});
